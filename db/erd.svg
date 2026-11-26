@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="330" viewBox="0 0 1000 330" font-family="Apple SD Gothic Neo, Helvetica, sans-serif">
+  <rect width="1000" height="330" fill="#ffffff"/>
+  <text x="40" y="38" font-size="20" font-weight="700" fill="#1f2937">독서 기록 앱 ERD</text>
+  <text x="200" y="38" font-size="13" fill="#6b7280">PostgreSQL · reading_app</text>
+
+  <!-- book -->
+  <g>
+    <rect x="40" y="70" width="400" height="126" rx="6" fill="#ffffff" stroke="#374151" stroke-width="1.5"/>
+    <path d="M46 70 h388 a6 6 0 0 1 6 6 v30 h-400 v-30 a6 6 0 0 1 6 -6 z" fill="#1e3a8a"/>
+    <text x="56" y="94" font-size="15" font-weight="700" fill="#ffffff">book</text>
+    <text x="424" y="94" font-size="12" fill="#c7d2fe" text-anchor="end">책</text>
+    <line x1="40" y1="136" x2="440" y2="136" stroke="#e5e7eb"/>
+    <line x1="40" y1="166" x2="440" y2="166" stroke="#e5e7eb"/>
+    <g font-size="13" fill="#111827">
+      <text x="52" y="126" font-weight="700" fill="#b45309">PK</text>
+      <text x="90" y="126" font-weight="700">book_id</text>
+      <text x="210" y="126" fill="#4b5563">INT</text>
+      <text x="330" y="126" fill="#4b5563">IDENTITY</text>
+
+      <text x="90" y="156">title</text>
+      <text x="210" y="156" fill="#4b5563">VARCHAR(100)</text>
+      <text x="330" y="156" fill="#4b5563">NOT NULL</text>
+
+      <text x="90" y="186">author</text>
+      <text x="210" y="186" fill="#4b5563">VARCHAR(50)</text>
+      <text x="330" y="186" fill="#4b5563">NOT NULL</text>
+    </g>
+  </g>
+
+  <!-- reading_log -->
+  <g>
+    <rect x="560" y="70" width="400" height="156" rx="6" fill="#ffffff" stroke="#374151" stroke-width="1.5"/>
+    <path d="M566 70 h388 a6 6 0 0 1 6 6 v30 h-400 v-30 a6 6 0 0 1 6 -6 z" fill="#1e3a8a"/>
+    <text x="576" y="94" font-size="15" font-weight="700" fill="#ffffff">reading_log</text>
+    <text x="944" y="94" font-size="12" fill="#c7d2fe" text-anchor="end">독서 기록</text>
+    <line x1="560" y1="136" x2="960" y2="136" stroke="#e5e7eb"/>
+    <line x1="560" y1="166" x2="960" y2="166" stroke="#e5e7eb"/>
+    <line x1="560" y1="196" x2="960" y2="196" stroke="#e5e7eb"/>
+    <g font-size="13" fill="#111827">
+      <text x="572" y="126" font-weight="700" fill="#b45309">PK</text>
+      <text x="610" y="126" font-weight="700">log_id</text>
+      <text x="730" y="126" fill="#4b5563">INT</text>
+      <text x="850" y="126" fill="#4b5563">IDENTITY</text>
+
+      <text x="572" y="156" font-weight="700" fill="#047857">FK</text>
+      <text x="610" y="156">book_id</text>
+      <text x="730" y="156" fill="#4b5563">INT</text>
+      <text x="850" y="156" fill="#4b5563">NOT NULL</text>
+
+      <text x="610" y="186">started_at</text>
+      <text x="730" y="186" fill="#4b5563">TIMESTAMPTZ</text>
+      <text x="850" y="186" fill="#4b5563">NOT NULL</text>
+
+      <text x="610" y="216">ended_at</text>
+      <text x="730" y="216" fill="#4b5563">TIMESTAMPTZ</text>
+      <text x="850" y="216" fill="#4b5563">NULL</text>
+    </g>
+  </g>
+
+  <!-- relationship: book 1 : N reading_log -->
+  <g stroke="#374151" stroke-width="1.5" fill="none">
+    <polyline points="440,121 500,121 500,151 560,151"/>
+    <!-- one and only one (book side) -->
+    <line x1="452" y1="113" x2="452" y2="129"/>
+    <line x1="460" y1="113" x2="460" y2="129"/>
+    <!-- zero or many (reading_log side) -->
+    <line x1="544" y1="151" x2="560" y2="141"/>
+    <line x1="544" y1="151" x2="560" y2="161"/>
+    <circle cx="536" cy="151" r="5" fill="#ffffff"/>
+  </g>
+  <text x="456" y="106" font-size="12" fill="#374151" text-anchor="middle">1</text>
+  <text x="548" y="176" font-size="12" fill="#374151" text-anchor="middle">N</text>
+
+  <!-- notes -->
+  <g font-size="12" fill="#4b5563">
+    <text x="40" y="262">관계: book 1 : N reading_log  (reading_log.book_id → book.book_id)</text>
+    <text x="40" y="284">제약: reading_log.started_at DEFAULT now() · CHECK (ended_at &gt;= started_at)</text>
+    <text x="40" y="306">ended_at이 NULL이면 측정 중인 기록 · 누적 시간은 SUM(ended_at − started_at)으로 계산</text>
+  </g>
+</svg>
