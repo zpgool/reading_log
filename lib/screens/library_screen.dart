@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../repositories/book_repository.dart';
+import '../repositories/reading_log_repository.dart';
 import '../utils.dart';
 
-/// 내 서재: 등록한 책과 누적 독서 시간, 책 등록
+/// 내 서재: 오늘 독서 시간, 등록한 책과 책별 누적 독서 시간, 책 등록·삭제
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
 
@@ -15,9 +16,11 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   final _repo = BookRepository();
+  final _logRepo = ReadingLogRepository();
   final _refreshKey = GlobalKey<RefreshIndicatorState>();
 
   List<BookSummary>? _books; // null이면 아직 불러오는 중
+  int _todaySeconds = 0; // 오늘 모든 책의 독서 시간
   Object? _error;
 
   @override
@@ -26,13 +29,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
     _load();
   }
 
-  /// DB에서 서재 목록 다시 불러오기
+  /// DB에서 서재 목록과 오늘 독서 시간 다시 불러오기
   Future<void> _load() async {
     try {
       final books = await _repo.findAllWithTotal();
+      final today = await _logRepo.todaySeconds();
       if (!mounted) return;
       setState(() {
         _books = books;
+        _todaySeconds = today;
         _error = null;
       });
     } catch (e) {
@@ -66,10 +71,34 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  /// 책 삭제: 2차 확인 후 DB에서 삭제하고 목록에서 바로 제거
+  Future<void> _deleteBook(BookSummary summary) async {
+    final book = summary.book;
+    final ok = await confirmDialog(
+      context,
+      title: '「${book.title}」을(를) 삭제할까요?',
+      message: '이 책의 독서 기록(누적 ${formatDuration(summary.totalSeconds)})도 모두 함께 삭제돼요.\n'
+          '삭제한 뒤에는 되돌릴 수 없어요.',
+      confirmText: '삭제',
+      danger: true,
+    );
+    if (!ok) return;
+
+    try {
+      await _repo.deleteBook(book.bookId);
+      if (!mounted) return;
+      setState(() => _books = _books!.where((b) => b.book.bookId != book.bookId).toList());
+      _showMessage('「${book.title}」을(를) 삭제했어요');
+      await _load(); // 지운 책의 오늘 기록이 빠지도록 오늘 독서 시간까지 다시 불러오기
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('삭제하지 못했어요: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final books = _books ?? const <BookSummary>[];
-    final total = books.fold(0, (sum, b) => sum + b.totalSeconds);
 
     return Scaffold(
       appBar: AppBar(title: const Text('내 서재')),
@@ -84,7 +113,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           children: [
             // 고정 영역: 요약 카드
             const SizedBox(height: 8),
-            _SummaryCard(totalSeconds: total, bookCount: books.length),
+            _SummaryCard(todaySeconds: _todaySeconds, bookCount: books.length),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -123,7 +152,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       else if (books.isEmpty)
                         const _Message('아직 등록한 책이 없어요.\n오른쪽 아래 버튼으로 첫 책을 등록해 보세요.')
                       else
-                        for (final b in books) _BookTile(summary: b),
+                        for (final b in books) _BookTile(summary: b, onDelete: () => _deleteBook(b)),
                     ],
                   ),
                 ),
@@ -150,12 +179,12 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// 상단 요약: 총 독서 시간, 등록한 책 수
+/// 상단 요약: 오늘 독서 시간, 등록한 책 수
 class _SummaryCard extends StatelessWidget {
-  final int totalSeconds;
+  final int todaySeconds;
   final int bookCount;
 
-  const _SummaryCard({required this.totalSeconds, required this.bookCount});
+  const _SummaryCard({required this.todaySeconds, required this.bookCount});
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +198,10 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('총 독서 시간', style: TextStyle(color: Colors.white70)),
+          const Text('오늘 독서 시간', style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 4),
           Text(
-            formatDuration(totalSeconds),
+            formatDuration(todaySeconds),
             style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -183,11 +212,12 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-/// 책 한 권: 제목/저자 + 누적 시간. 누르면 그 책으로 타이머 열기
+/// 책 한 권: 제목/저자 + 누적 시간 + 더보기(삭제). 누르면 그 책으로 타이머 열기
 class _BookTile extends StatelessWidget {
   final BookSummary summary;
+  final VoidCallback onDelete;
 
-  const _BookTile({required this.summary});
+  const _BookTile({required this.summary, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -198,14 +228,38 @@ class _BookTile extends StatelessWidget {
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        contentPadding: const EdgeInsets.only(left: 16, right: 8),
+        contentPadding: const EdgeInsets.only(left: 16, right: 4),
         title: Text(book.title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(book.author),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(formatDuration(summary.totalSeconds), style: const TextStyle(fontWeight: FontWeight.w600)),
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            Text.rich(TextSpan(children: [
+              TextSpan(text: '누적 ', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              TextSpan(
+                text: formatDuration(summary.totalSeconds),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ])),
+            PopupMenuButton<String>(
+              tooltip: '더보기',
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
+              onSelected: (value) {
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, color: Colors.red[700]),
+                      const SizedBox(width: 8),
+                      Text('삭제', style: TextStyle(color: Colors.red[700])),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         onTap: () => context.go('/timer?bookId=${book.bookId}'),
