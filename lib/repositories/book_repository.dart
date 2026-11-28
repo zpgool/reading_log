@@ -19,6 +19,21 @@ class BookRepository {
     return Book(bookId: r[0] as int, title: r[1] as String, author: r[2] as String);
   }
 
+  /// 책 삭제. reading_log가 book을 FK로 참조하므로 그 책의 기록을 먼저 지운다.
+  /// 두 DELETE를 한 트랜잭션으로 묶어서, 중간에 실패하면 둘 다 취소된다.
+  Future<void> deleteBook(int bookId) async {
+    await db.runTx((tx) async {
+      await tx.execute(
+        Sql.named('DELETE FROM reading_log WHERE book_id = @bookId'),
+        parameters: {'bookId': bookId},
+      );
+      await tx.execute(
+        Sql.named('DELETE FROM book WHERE book_id = @bookId'),
+        parameters: {'bookId': bookId},
+      );
+    });
+  }
+
   /// 모든 책과 책별 누적 독서 시간 (끝난 기록만 합산, 새로 등록한 책이 위)
   Future<List<BookSummary>> findAllWithTotal() async {
     final rows = await db.execute('''

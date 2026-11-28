@@ -15,7 +15,13 @@ final router = GoRouter(
       builder: (context, state, child) => HomeShell(child: child),
       routes: [
         GoRoute(path: '/library', builder: (context, state) => const LibraryScreen()),
-        GoRoute(path: '/timer', builder: (context, state) => const TimerScreen()),
+        GoRoute(
+          path: '/timer',
+          // 내 서재에서 책을 누르면 /timer?bookId=1 로 들어온다
+          builder: (context, state) => TimerScreen(
+            bookId: int.tryParse(state.uri.queryParameters['bookId'] ?? ''),
+          ),
+        ),
         GoRoute(path: '/calendar', builder: (context, state) => const CalendarScreen()),
       ],
     ),
