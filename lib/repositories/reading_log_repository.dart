@@ -1,7 +1,11 @@
 import 'package:postgres/postgres.dart';
 
 import '../db/database.dart';
+import '../models/book.dart';
 import '../models/reading_log.dart';
+
+/// 캘린더 한 칸의 책 하나: 그날(day) 그 책(book)을 읽은 시간(초)
+typedef DayBookTime = ({int day, Book book, int seconds});
 
 /// reading_log 테이블 SQL: 타이머 시작·일시정지·종료, 캘린더(날짜별 독서 시간) 조회
 class ReadingLogRepository {
@@ -69,5 +73,32 @@ class ReadingLogRepository {
       WHERE (started_at AT TIME ZONE 'Asia/Seoul')::date = (now() AT TIME ZONE 'Asia/Seoul')::date
     ''');
     return rows.first[0] as int;
+  }
+
+  /// 한 달(한국 시간)의 날짜별·책별 독서 시간. 측정 중인 기록은 지금까지 읽은 만큼 포함.
+  /// 자정을 넘겨 읽은 기록은 시작한 날짜로 계산한다.
+  Future<List<DayBookTime>> findMonth(int year, int month) async {
+    final rows = await db.execute(
+      Sql.named('''
+        SELECT EXTRACT(DAY FROM r.started_at AT TIME ZONE 'Asia/Seoul')::int AS read_day,
+               b.book_id, b.title, b.author,
+               SUM(EXTRACT(EPOCH FROM COALESCE(r.ended_at, now()) - r.started_at))::int AS total_sec
+        FROM reading_log r
+        JOIN book b ON b.book_id = r.book_id
+        WHERE r.started_at AT TIME ZONE 'Asia/Seoul' >= make_date(@year::int, @month::int, 1)
+          AND r.started_at AT TIME ZONE 'Asia/Seoul' <  make_date(@year::int, @month::int, 1) + interval '1 month'
+        GROUP BY read_day, b.book_id
+        ORDER BY read_day, total_sec DESC
+      '''),
+      parameters: {'year': year, 'month': month},
+    );
+
+    return rows
+        .map((r) => (
+              day: r[0] as int,
+              book: Book(bookId: r[1] as int, title: r[2] as String, author: r[3] as String),
+              seconds: r[4] as int,
+            ))
+        .toList();
   }
 }
